@@ -28,6 +28,10 @@ class SearchPagingAdapter: PagingDataAdapter<SearchPagingModel, RecyclerView.Vie
             else -> viewTypeNone
         }
     }
+
+    fun onSpanCountChange() {
+        notifyItemRangeChanged(0, itemCount)
+    }
 }
 
 class GagPagingDiffCallback: DiffUtil.ItemCallback<SearchPagingModel>() {
