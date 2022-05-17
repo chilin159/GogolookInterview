@@ -13,13 +13,12 @@ import kotlinx.coroutines.flow.map
 
 class MainViewModel(app: Application, private val searchRepository: SearchRepository): AndroidViewModel(app) {
 
-    fun getSearchListFlow() = searchRepository.getSearchListPager().flow.map { pagingData ->
+    fun getSearchListFlow(query: String? = null) = searchRepository.getSearchListPager(query).flow.map { pagingData ->
         pagingData.map { imageHit ->
             transFormToSearchPagingModel(imageHit)
         }
     }.cachedIn(viewModelScope)
 
-    @VisibleForTesting
-    fun transFormToSearchPagingModel(imageHit: ImageHit): SearchPagingModel = SearchPagingModel.SearchPhotoUi(imageHit)
+    private fun transFormToSearchPagingModel(imageHit: ImageHit): SearchPagingModel = SearchPagingModel.SearchPhotoUi(imageHit)
 
 }

@@ -8,9 +8,6 @@ import com.example.gogolookinterview.paging.SearchPagingModel
 
 class SearchPagingAdapter: PagingDataAdapter<SearchPagingModel, RecyclerView.ViewHolder>(GagPagingDiffCallback())  {
 
-    private val viewTypeNone = -1
-    private val viewTypePhoto = 0
-
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
         return SearchPhotoViewHolder(parent)
     }
@@ -19,13 +16,6 @@ class SearchPagingAdapter: PagingDataAdapter<SearchPagingModel, RecyclerView.Vie
         val gagPagingModel = getItem(position) ?: return
         when(holder) {
             is SearchPhotoViewHolder -> holder.bindData((gagPagingModel as SearchPagingModel.SearchPhotoUi).imageHit)
-        }
-    }
-
-    override fun getItemViewType(position: Int): Int {
-        return when(getItem(position)) {
-            is SearchPagingModel.SearchPhotoUi -> viewTypePhoto
-            else -> viewTypeNone
         }
     }
 

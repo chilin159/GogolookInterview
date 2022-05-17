@@ -9,8 +9,8 @@ class SearchDataSource {
 
     private val api get() = ApiService.create()
 
-    suspend fun getSearchImages(page: Int, perPage: Int) = withContext(Dispatchers.IO) {
-        api.getSearchImages(page = page, perPage = perPage).getResult { it.imageHits }
+    suspend fun getSearchImages(query: String? = null, page: Int, perPage: Int) = withContext(Dispatchers.IO) {
+        api.getSearchImages(query = query, page = page, perPage = perPage).getResult { it.imageHits }
     }
 
 }

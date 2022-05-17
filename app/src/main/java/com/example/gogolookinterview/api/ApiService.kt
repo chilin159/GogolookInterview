@@ -15,6 +15,7 @@ interface ApiService {
     @GET("api/")
     suspend fun getSearchImages(
         @Query("key") key: String = BuildConfig.API_KEY,
+        @Query("q") query: String?,
         @Query("page") page: Int,
         @Query("per_page") perPage: Int
     ): Response<SearchImagesData>
