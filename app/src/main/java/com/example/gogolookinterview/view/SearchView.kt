@@ -97,9 +97,9 @@ fun SearchView(
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
             keyboardActions = KeyboardActions(
                 onSearch = {
-                    onKeyboardActionSearch.invoke()
                     focusManager.clearFocus()
                     keyboardController?.hide()
+                    onKeyboardActionSearch.invoke()
                 }
             ),
         )

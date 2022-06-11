@@ -1,4 +1,4 @@
-package com.example.gogolookinterview.view
+package com.example.gogolookinterview.home
 
 import android.content.res.Configuration
 import androidx.compose.animation.animateContentSize
