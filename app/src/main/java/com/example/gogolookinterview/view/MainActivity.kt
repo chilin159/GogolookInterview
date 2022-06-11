@@ -1,122 +1,341 @@
 package com.example.gogolookinterview.view
 
-import android.content.Context
-import android.database.MatrixCursor
-import android.graphics.PorterDuff
 import android.os.Bundle
-import android.provider.BaseColumns
-import android.view.inputmethod.InputMethodManager
-import android.widget.ImageView
+import androidx.activity.compose.setContent
 import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.widget.SearchView
-import androidx.core.content.ContextCompat
-import androidx.cursoradapter.widget.SimpleCursorAdapter
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyGridState
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.material.CircularProgressIndicator
+import androidx.compose.material.DropdownMenu
+import androidx.compose.material.DropdownMenuItem
+import androidx.compose.material.Text
+import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.res.colorResource
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.PopupProperties
+import androidx.constraintlayout.compose.ConstraintLayout
+import androidx.constraintlayout.compose.Dimension
 import androidx.lifecycle.lifecycleScope
-import androidx.recyclerview.widget.GridLayoutManager
-import androidx.recyclerview.widget.RecyclerView
+import androidx.paging.LoadState
+import androidx.paging.PagingData
+import androidx.paging.compose.LazyPagingItems
+import androidx.paging.compose.collectAsLazyPagingItems
 import com.example.gogolookinterview.R
+import com.example.gogolookinterview.model.ImageHit
+import com.example.gogolookinterview.paging.SearchPagingModel
 import com.example.gogolookinterview.repository.SearchRepository
 import com.example.gogolookinterview.room.AppDatabase
 import com.example.gogolookinterview.room.SearchHistory
 import com.example.gogolookinterview.utils.getViewModel
 import com.example.gogolookinterview.viewmodel.MainViewModel
-import kotlinx.android.synthetic.main.activity_main.*
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import java.util.*
 
 
 class MainActivity : AppCompatActivity() {
     private val viewModel by lazy {
-        getViewModel { MainViewModel(application, SearchRepository())}
+        getViewModel { MainViewModel(application, SearchRepository()) }
     }
-    private lateinit var searchPagingAdapter: SearchPagingAdapter
-    private var searchJob: Job? = null
     private val searchHistoryDao by lazy {
         AppDatabase.getInstance(this).searchHistoryDao()
     }
     private var currentQuery: String? = null
-    private val cursorColumnName = "Name"
     private val searchSuggestions = mutableListOf<String>()
-    private val searchSuggestionsAdapter by lazy {
-        val from = arrayOf(cursorColumnName)
-        val to = intArrayOf(android.R.id.text1)
-        SimpleCursorAdapter(
-            this@MainActivity,
-            android.R.layout.simple_list_item_1,
-            null,
-            from,
-            to,
-            0
-        )
-    }
+    private lateinit var searchListItems: LazyPagingItems<SearchPagingModel>
+    private lateinit var lazyGridState: LazyGridState
+    private val displayLayout = mutableStateOf<DisplayLayout>(DisplayLayout.List)
 
     sealed class DisplayLayout(val spanCount: Int) {
-        object List: DisplayLayout(1)
-        object Grid: DisplayLayout(2)
+        object List : DisplayLayout(1)
+        object Grid : DisplayLayout(2)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
-        initView()
-        search()
-    }
-
-    private fun initView() {
-        recyclerView.setup()
-        listIcon.setOnClickListener {
-            changeDisplayLayout(DisplayLayout.List)
+        setContent {
+            MainUi()
         }
-        gridIcon.setOnClickListener {
-            changeDisplayLayout(DisplayLayout.Grid)
-        }
-        searchView.setup()
         initSearchSuggestionsFromDao()
     }
 
-    private fun RecyclerView.setup() {
-        layoutManager = GridLayoutManager(context, DisplayLayout.List.spanCount)
-        adapter = SearchPagingAdapter().also {
-            searchPagingAdapter = it
+    @Composable
+    private fun MainUi() {
+        searchListItems = viewModel.searchListFlow.collectAsLazyPagingItems()
+        val displayLayout = remember { displayLayout }
+        Column {
+            TopUi(displayLayout)
+            PagingUi(searchListItems, displayLayout)
         }
-        addItemDecoration(SearchItemDecoration())
     }
 
-    private fun SearchView.setup() {
-        setIconifiedByDefault(false)
-        setOnQueryTextListener(object : SearchView.OnQueryTextListener {
-            override fun onQueryTextSubmit(query: String) = submitQuery(query)
-            override fun onQueryTextChange(newText: String) = if (newText.isEmpty()) {
-                submitQuery()
-            } else {
-                getSuggestion(newText)
-                false
-            }
-        })
-        queryHint = "Search image"
-        suggestionsAdapter = searchSuggestionsAdapter
-        setOnSuggestionListener(object: SearchView.OnSuggestionListener {
-            override fun onSuggestionClick(position: Int): Boolean {
-                val selectedQuery = searchSuggestionsAdapter.cursor.getString(1)
-                submitQuery(selectedQuery)
-                return true
-            }
+    @Composable
+    private fun TopUi(displayLayout: State<DisplayLayout>) {
+        Row {
+            ConstraintLayout(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .wrapContentHeight()
+            ) {
+                val (searchBar, searchHistoryMenu, listIcon, gridIcon) = createRefs()
+                val searchBarModifier = Modifier
+                    .wrapContentWidth()
+                    .constrainAs(searchBar) {
+                        start.linkTo(parent.start)
+                        end.linkTo(listIcon.start)
+                        top.linkTo(parent.top)
+                        bottom.linkTo(parent.bottom)
+                        width = Dimension.fillToConstraints
+                    }
+                val searchHistoryMenuModifier = Modifier
+                    .constrainAs(searchHistoryMenu) {
+                        top.linkTo(searchBar.bottom)
+                        start.linkTo(searchBar.start)
+                        end.linkTo(searchBar.end)
+                        width = Dimension.fillToConstraints
+                    }
+                val listIconModifier = Modifier
+                    .constrainAs(listIcon) {
+                        start.linkTo(searchBar.end)
+                        end.linkTo(gridIcon.start, 8.dp)
+                        top.linkTo(parent.top)
+                        bottom.linkTo(parent.bottom)
+                    }
+                    .size(24.dp)
+                    .padding(4.dp)
+                    .clickable {
+                        changeDisplayLayout(DisplayLayout.List)
+                    }
+                val gridIconModifier = Modifier
+                    .constrainAs(gridIcon) {
+                        start.linkTo(listIcon.end)
+                        end.linkTo(parent.end, 8.dp)
+                        top.linkTo(parent.top)
+                        bottom.linkTo(parent.bottom)
+                    }
+                    .size(24.dp)
+                    .clickable {
+                        changeDisplayLayout(DisplayLayout.Grid)
+                    }
 
-            override fun onSuggestionSelect(position: Int): Boolean {
-                return false
+                SearchUi(searchBarModifier, searchHistoryMenuModifier)
+
+                Image(painter = painterResource(R.drawable.ic_list),
+                    contentDescription = null,
+                    colorFilter = ColorFilter.tint(
+                        colorResource(
+                            getIconColor(displayLayout.value == DisplayLayout.List)
+                        )
+                    ),
+                    modifier = listIconModifier
+                )
+
+                Image(painter = painterResource(R.drawable.ic_grid),
+                    contentDescription = null,
+                    colorFilter = ColorFilter.tint(
+                        colorResource(
+                            getIconColor(displayLayout.value == DisplayLayout.Grid)
+                        )
+                    ),
+                    modifier = gridIconModifier
+                )
             }
-        })
+        }
+    }
+
+    @Composable
+    private fun SearchUi(searchBarModifier: Modifier, searchHistoryMenuModifier: Modifier) {
+        val searchTextValue = remember { mutableStateOf(TextFieldValue("")) }
+        val searchHistoryExpanded = remember { mutableStateOf(false) }
+        val suggestions = remember { mutableStateListOf("") }
+        SearchView(state = searchTextValue,
+            modifier = searchBarModifier,
+            onKeyboardActionSearch = {
+                submitQuery(searchTextValue.value.text)
+                searchHistoryExpanded.value = false
+            },
+            onTextClear = {
+                submitQuery()
+            },
+            onTextChanged = {
+                suggestions.clear()
+                suggestions.addAll(getSuggestion(it).takeUnless { it.isEmpty() }
+                    ?: searchSuggestions)
+                if (suggestions.isNotEmpty()) {
+                    searchHistoryExpanded.value = true
+                }
+            }
+        )
+
+        DropdownMenu(
+            expanded = searchHistoryExpanded.value,
+            onDismissRequest = { searchHistoryExpanded.value = false },
+            properties = PopupProperties(focusable = false),
+            modifier = searchHistoryMenuModifier.fillMaxWidth()
+        ) {
+            suggestions.forEach {
+                DropdownMenuItem(onClick = {
+                    searchTextValue.value = TextFieldValue(it)
+                }) {
+                    Text(text = it)
+                }
+            }
+        }
+    }
+
+    @Composable
+    private fun PagingUi(
+        searchListItems: LazyPagingItems<SearchPagingModel>,
+        displayLayout: State<DisplayLayout>
+    ) {
+        Column {
+            ConstraintLayout(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight()
+            ) {
+                val (searchList, refreshLoadingBar, appendLoadingBar) = createRefs()
+                val searchListModifier = Modifier.constrainAs(searchList) {
+                    top.linkTo(parent.top, 8.dp)
+                    bottom.linkTo(
+                        if (searchListItems.loadState.append is LoadState.Loading) {
+                            appendLoadingBar.top
+                        } else {
+                            parent.bottom
+                        },
+                        8.dp
+                    )
+                    height = Dimension.fillToConstraints
+                }
+                val refreshLoadingBarModifier = Modifier
+                    .size(48.dp)
+                    .constrainAs(refreshLoadingBar) {
+                        top.linkTo(parent.top)
+                        bottom.linkTo(parent.bottom)
+                        start.linkTo(parent.start)
+                        end.linkTo(parent.end)
+                    }
+                val appendLoadingBarModifier = Modifier
+                    .size(24.dp)
+                    .constrainAs(appendLoadingBar) {
+                        top.linkTo(searchList.bottom, 4.dp)
+                        bottom.linkTo(parent.bottom, 4.dp)
+                        start.linkTo(parent.start)
+                        end.linkTo(parent.end)
+                    }
+
+                SearchList(
+                    modifier = searchListModifier,
+                    searchListItems,
+                    displayLayout
+                )
+                with(searchListItems.loadState) {
+                    when {
+                        refresh is LoadState.Loading -> CircularProgressIndicator(
+                            modifier = refreshLoadingBarModifier,
+                            color = colorResource(R.color.purple_500),
+                            strokeWidth = 4.dp
+                        )
+                        append is LoadState.Loading -> CircularProgressIndicator(
+                            modifier = appendLoadingBarModifier,
+                            color = colorResource(R.color.purple_500),
+                            strokeWidth = 4.dp
+                        )
+                        append is LoadState.Error -> Unit
+                    }
+                }
+            }
+        }
+    }
+
+    @Composable
+    private fun SearchList(
+        modifier: Modifier,
+        searchListItems: LazyPagingItems<SearchPagingModel>,
+        displayLayout: State<DisplayLayout>
+    ) {
+        lazyGridState = rememberLazyGridState()
+        LazyVerticalGrid(
+            state = lazyGridState,
+            columns = GridCells.Fixed(displayLayout.value.spanCount),
+            contentPadding = PaddingValues(horizontal = if (displayLayout.value == DisplayLayout.List) 0.dp else 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = modifier
+        ) {
+            items(searchListItems.itemCount) { index ->
+                (searchListItems[index] as? SearchPagingModel.SearchPhotoUi)?.let {
+                    SearchPhotoUi(it)
+                }
+            }
+        }
+    }
+
+    @Preview
+    @Composable
+    private fun PreviewTopUi() {
+        TopUi(remember { displayLayout })
+    }
+
+    @Preview
+    @Composable
+    private fun PreviewSearchUi() {
+        val pagingList = listOf(
+            SearchPagingModel.SearchPhotoUi(
+                ImageHit(
+                    id = 0,
+                    type = "type",
+                    tags = "tags",
+                    imageURL = "",
+                    imageWidth = 400,
+                    imageHeight = 300,
+                    previewURL = "",
+                    previewHeight = 400,
+                    previewWidth = 300,
+                    user = "user name",
+                    userImageURL = ""
+                )
+            ),
+            SearchPagingModel.SearchPhotoUi(
+                ImageHit(
+                    id = 0,
+                    type = "type",
+                    tags = "tags",
+                    imageURL = "",
+                    imageWidth = 400,
+                    imageHeight = 300,
+                    previewURL = "",
+                    previewHeight = 400,
+                    previewWidth = 300,
+                    user = "user name2",
+                    userImageURL = ""
+                )
+            )
+        )
+        val searchListItems = flowOf<PagingData<SearchPagingModel>>(
+            PagingData.from(
+                pagingList
+            )
+        ).collectAsLazyPagingItems()
+        PagingUi(searchListItems, displayLayout)
     }
 
     private fun search(query: String? = null) {
-        searchJob?.cancel()
-        searchJob = lifecycleScope.launch {
-            viewModel.getSearchListFlow(query).collectLatest { pagingData ->
-                searchPagingAdapter.submitData(pagingData)
-            }
+        viewModel.setQuery(query)
+        searchListItems.refresh()
+        lifecycleScope.launch {
+            lazyGridState.scrollToItem(0)
         }
     }
 
@@ -124,22 +343,22 @@ class MainActivity : AppCompatActivity() {
         if (currentQuery == query) return false
         currentQuery = query
         search(query)
-        (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager).hideSoftInputFromWindow(searchView.windowToken, 0)
-        searchView.clearFocus()
         query.takeUnless { it.isNullOrBlank() }?.let {
             appendSearchSuggestionIfNeed(it)
         }
         return true
     }
 
-    private fun getSuggestion(text: String) {
-        val cursor = MatrixCursor(arrayOf(BaseColumns._ID, cursorColumnName))
+    private fun getSuggestion(text: String): List<String> {
+        val suggestions = mutableListOf<String>()
         for (i in searchSuggestions.indices) {
-            if (searchSuggestions[i].lowercase(Locale.getDefault()).contains(text.lowercase(Locale.getDefault()))) {
-                cursor.addRow(arrayOf<Any>(i, searchSuggestions[i]))
+            if (searchSuggestions[i].lowercase(Locale.getDefault())
+                    .contains(text.lowercase(Locale.getDefault()))
+            ) {
+                suggestions.add(searchSuggestions[i])
             }
         }
-        searchSuggestionsAdapter.changeCursor(cursor)
+        return suggestions
     }
 
     private fun initSearchSuggestionsFromDao() {
@@ -156,18 +375,13 @@ class MainActivity : AppCompatActivity() {
         searchSuggestions.add(query)
     }
 
-    private fun changeDisplayLayout(displayLayout: DisplayLayout) {
-        (recyclerView.layoutManager as GridLayoutManager).spanCount = displayLayout.spanCount
-        (recyclerView.adapter as SearchPagingAdapter).onSpanCountChange()
-        listIcon.setEnableState(displayLayout is DisplayLayout.List)
-        gridIcon.setEnableState(displayLayout is DisplayLayout.Grid)
+    private fun changeDisplayLayout(layout: DisplayLayout) {
+        displayLayout.value = layout
     }
 
-    private fun ImageView.setEnableState(isEnabled: Boolean) {
-        setColorFilter(
-            ContextCompat.getColor(this@MainActivity,
-                if (isEnabled) R.color.purple_500
-                else R.color.grey)
-            ,PorterDuff.Mode.SRC_IN)
+    private fun getIconColor(isEnabled: Boolean) = if (isEnabled) {
+        R.color.purple_500
+    } else {
+        R.color.grey
     }
 }

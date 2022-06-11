@@ -12,9 +12,13 @@ class SearchRepository {
         return PagingConfig(pageSize = 10)
     }
 
-    fun getSearchListPager(query: String? = null, pagingConfig: PagingConfig = getDefaultPageConfig()) = Pager(
+    fun getSearchListPager(pagingConfig: PagingConfig = getDefaultPageConfig()) = Pager(
         config = pagingConfig
     ) {
-        SearchPagingSource(dataSource, query)
+        SearchPagingSource(dataSource)
+    }
+
+    fun setQuery(query: String? = null) {
+        dataSource.searchQuery = query
     }
 }

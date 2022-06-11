@@ -8,9 +8,9 @@ import kotlinx.coroutines.withContext
 class SearchDataSource {
 
     private val api get() = ApiService.create()
+    var searchQuery: String? = null
 
-    suspend fun getSearchImages(query: String? = null, page: Int, perPage: Int) = withContext(Dispatchers.IO) {
-        api.getSearchImages(query = query, page = page, perPage = perPage).getResult { it.imageHits }
+    suspend fun getSearchImages(page: Int, perPage: Int) = withContext(Dispatchers.IO) {
+        api.getSearchImages(query = searchQuery, page = page, perPage = perPage).getResult { it.imageHits }
     }
-
 }
